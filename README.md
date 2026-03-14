@@ -73,7 +73,6 @@ EMAIL_PASSWORD=your-app-password
 - **Safe Error Handling**: prevents React crashes by sanitizing recursive backend validation objects.
 
 ## Project Structure
-... [rest of the structure]
 
 ```
 coreinventory/
