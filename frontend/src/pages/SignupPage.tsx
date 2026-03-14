@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import api from '@/lib/api'
+import { getErrorMessage } from '@/lib/utils'
 
 export default function SignupPage() {
   const [form, setForm] = useState({ email: '', full_name: '', password: '', role: 'warehouse_staff' })
@@ -16,7 +17,7 @@ export default function SignupPage() {
       await api.post('/auth/signup', form)
       navigate('/login')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Signup failed')
+      setError(getErrorMessage(err, 'Signup failed'))
     } finally {
       setLoading(false)
     }

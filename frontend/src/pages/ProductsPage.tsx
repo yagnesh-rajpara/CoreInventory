@@ -9,6 +9,7 @@ import api from '@/lib/api'
 import type { Product, Category, Location, Warehouse } from '@/types'
 import { Plus, Search, Package, X } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
+import { getErrorMessage } from '@/lib/utils'
 
 const productSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters").max(100),
@@ -53,7 +54,7 @@ export default function ProductsPage() {
       toast.success('Product created successfully')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to create product')
+      toast.error(getErrorMessage(err, 'Failed to create product'))
     }
   })
 

@@ -9,6 +9,7 @@ import api from '@/lib/api'
 import type { Receipt, Product, Warehouse, Location } from '@/types'
 import { Plus, CheckCircle, XCircle, ArrowDownToLine, X, Search } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
+import { getErrorMessage } from '@/lib/utils'
 
 const receiptSchema = z.object({
   supplier_name: z.string().optional(),
@@ -63,7 +64,7 @@ export default function ReceiptsPage() {
       toast.success('Receipt created successfully')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to create receipt')
+      toast.error(getErrorMessage(err, 'Failed to create receipt'))
     }
   })
   const validateMut = useMutation({ 
@@ -75,7 +76,7 @@ export default function ReceiptsPage() {
       toast.success('Receipt validated')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to validate receipt')
+      toast.error(getErrorMessage(err, 'Failed to validate receipt'))
     }
   })
   const cancelMut = useMutation({ 

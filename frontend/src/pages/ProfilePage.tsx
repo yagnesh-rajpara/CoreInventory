@@ -3,6 +3,8 @@ import { useMutation } from '@tanstack/react-query'
 import { useAuthStore } from '@/store'
 import api from '@/lib/api'
 import { User, Shield, Mail, Save } from 'lucide-react'
+import { toast } from 'sonner'
+import { getErrorMessage } from '@/lib/utils'
 
 export default function ProfilePage() {
   const { user, setAuth } = useAuthStore()
@@ -18,6 +20,9 @@ export default function ProfilePage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     },
+    onError: (err: any) => {
+      toast.error(getErrorMessage(err, 'Failed to update profile'))
+    }
   })
 
   return (

@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import api from '@/lib/api'
 import type { Warehouse } from '@/types'
 import { Plus, Warehouse as WarehouseIcon, MapPin, X } from 'lucide-react'
+import { getErrorMessage } from '@/lib/utils'
 
 const warehouseSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters"),
@@ -49,7 +50,7 @@ export default function WarehousesPage() {
       toast.success('Warehouse created successfully')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to create warehouse')
+      toast.error(getErrorMessage(err, 'Failed to create warehouse'))
     }
   })
 
@@ -62,7 +63,7 @@ export default function WarehousesPage() {
       toast.success('Location created successfully')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to create location')
+      toast.error(getErrorMessage(err, 'Failed to create location'))
     }
   })
 

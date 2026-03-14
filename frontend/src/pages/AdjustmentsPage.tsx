@@ -9,6 +9,7 @@ import api from '@/lib/api'
 import type { Adjustment, Product, Warehouse, Location } from '@/types'
 import { Plus, ClipboardList, X, Search } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
+import { getErrorMessage } from '@/lib/utils'
 
 const adjustmentSchema = z.object({
   product_id: z.coerce.number().min(1, "Product is required"),
@@ -52,7 +53,7 @@ export default function AdjustmentsPage() {
       toast.success('Adjustment applied successfully')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to apply adjustment')
+      toast.error(getErrorMessage(err, 'Failed to apply adjustment'))
     }
   })
 

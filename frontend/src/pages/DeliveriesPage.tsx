@@ -9,6 +9,7 @@ import api from '@/lib/api'
 import type { Delivery, Product, Warehouse, Location } from '@/types'
 import { Plus, CheckCircle, XCircle, ArrowUpFromLine, X, Search } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
+import { getErrorMessage } from '@/lib/utils'
 
 const deliverySchema = z.object({
   customer_name: z.string().optional(),
@@ -63,7 +64,7 @@ export default function DeliveriesPage() {
       toast.success('Delivery created successfully')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to create delivery')
+      toast.error(getErrorMessage(err, 'Failed to create delivery'))
     }
   })
   
@@ -76,7 +77,7 @@ export default function DeliveriesPage() {
       toast.success('Delivery validated')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to validate delivery')
+      toast.error(getErrorMessage(err, 'Failed to validate delivery'))
     }
   })
   

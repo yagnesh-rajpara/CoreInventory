@@ -9,6 +9,7 @@ import api from '@/lib/api'
 import type { Transfer, Product, Warehouse, Location } from '@/types'
 import { Plus, CheckCircle, XCircle, ArrowLeftRight, X, Search } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
+import { getErrorMessage } from '@/lib/utils'
 
 const transferSchema = z.object({
   from_location_id: z.coerce.number().min(1, "Origin location is required"),
@@ -64,7 +65,7 @@ export default function TransfersPage() {
       toast.success('Transfer created successfully')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to create transfer')
+      toast.error(getErrorMessage(err, 'Failed to create transfer'))
     }
   })
   
@@ -77,7 +78,7 @@ export default function TransfersPage() {
       toast.success('Transfer validated')
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.detail || 'Failed to validate transfer')
+      toast.error(getErrorMessage(err, 'Failed to validate transfer'))
     }
   })
   
