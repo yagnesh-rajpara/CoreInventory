@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useDebounce } from 'use-debounce'
 import api from '@/lib/api'
 import type { StockMove } from '@/types'
 import { Search, History } from 'lucide-react'
+import { Pagination } from '@/components/Pagination'
 
 const moveTypeColors: Record<string, string> = {
   receipt: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
@@ -15,11 +17,14 @@ const moveTypeColors: Record<string, string> = {
 export default function MoveHistoryPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [debouncedSearch] = useDebounce(search, 300)
+  const [page, setPage] = useState(1)
 
-  const { data: moves = [], isLoading } = useQuery<StockMove[]>({
-    queryKey: ['moves', search, typeFilter],
-    queryFn: () => api.get('/moves', { params: { search: search || undefined, move_type: typeFilter || undefined } }).then(r => r.data),
+  const { data, isLoading } = useQuery<{ total: number, items: StockMove[] }>({
+    queryKey: ['moves', debouncedSearch, typeFilter, page],
+    queryFn: () => api.get('/moves', { params: { search: debouncedSearch || undefined, move_type: typeFilter || undefined, page, limit: 50 } }).then(r => r.data),
   })
+  const moves = data?.items || []
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -71,6 +76,9 @@ export default function MoveHistoryPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {data && data.total > 0 && (
+          <Pagination page={page} total={data.total} limit={50} onPageChange={setPage} />
         )}
       </div>
     </div>

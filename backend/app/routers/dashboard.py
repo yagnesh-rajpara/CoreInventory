@@ -4,8 +4,8 @@ from sqlalchemy import func
 
 from app.database import get_db
 from app.models import (
-    Product, StockQuantity, Receipt, Delivery, InternalTransfer,
-    StockMove, OperationStatus, Location,
+    Product, Receipt, Delivery, InternalTransfer,
+    StockMove, OperationStatus, Location, MoveType
 )
 from app.schemas.dashboard import DashboardResponse, KPIResponse, RecentActivityItem
 
@@ -16,17 +16,15 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 def get_dashboard(db: Session = Depends(get_db)):
     total_products = db.query(Product).count()
 
-    # Aggregate total stock per product
-    stock_agg = (
-        db.query(StockQuantity.product_id, func.sum(StockQuantity.quantity).label("total"))
-        .group_by(StockQuantity.product_id).all()
-    )
-    stock_map = {row.product_id: row.total for row in stock_agg}
+    from app.services.operations_service import get_stock_quantity
+    
+    locations = db.query(Location).all()
+    products = db.query(Product).all()
 
     low_stock = 0
     out_of_stock = 0
-    for product in db.query(Product).all():
-        total = stock_map.get(product.id, 0)
+    for product in products:
+        total = sum([get_stock_quantity(db, product.id, loc.id) for loc in locations])
         if total == 0:
             out_of_stock += 1
         elif total <= product.low_stock_threshold:

@@ -21,7 +21,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     sku = Column(String(100), unique=True, nullable=False, index=True)
-    category_id = Column(Integer, ForeignKey("product_categories.id"), nullable=True)
+    category_id = Column(Integer, ForeignKey("product_categories.id", ondelete="RESTRICT"), nullable=True)
     unit_of_measure = Column(String(50), default="Unit")
     low_stock_threshold = Column(Integer, default=10)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

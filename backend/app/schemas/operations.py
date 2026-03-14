@@ -1,18 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import datetime
-
 
 # ─── Receipt ─────────────────────────────────────────────────────────
 class ReceiptLineCreate(BaseModel):
     product_id: int
-    quantity: int
+    quantity: int = Field(..., gt=0)
 
 
 class ReceiptCreate(BaseModel):
-    supplier_name: Optional[str] = None
-    location_id: int
-    notes: Optional[str] = None
+    supplier_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    location_id: int = Field(..., gt=0)
+    notes: Optional[str] = Field(None, max_length=500)
     lines: List[ReceiptLineCreate] = []
 
 
@@ -47,13 +46,13 @@ class ReceiptResponse(BaseModel):
 # ─── Delivery ────────────────────────────────────────────────────────
 class DeliveryLineCreate(BaseModel):
     product_id: int
-    quantity: int
+    quantity: int = Field(..., gt=0)
 
 
 class DeliveryCreate(BaseModel):
-    customer_name: Optional[str] = None
-    location_id: int
-    notes: Optional[str] = None
+    customer_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    location_id: int = Field(..., gt=0)
+    notes: Optional[str] = Field(None, max_length=500)
     lines: List[DeliveryLineCreate] = []
 
 
@@ -88,14 +87,20 @@ class DeliveryResponse(BaseModel):
 # ─── Transfer ────────────────────────────────────────────────────────
 class TransferLineCreate(BaseModel):
     product_id: int
-    quantity: int
+    quantity: int = Field(..., gt=0)
 
 
 class TransferCreate(BaseModel):
-    from_location_id: int
-    to_location_id: int
-    notes: Optional[str] = None
+    from_location_id: int = Field(..., gt=0)
+    to_location_id: int = Field(..., gt=0)
+    notes: Optional[str] = Field(None, max_length=500)
     lines: List[TransferLineCreate] = []
+
+    @model_validator(mode='after')
+    def check_locations(self) -> 'TransferCreate':
+        if self.from_location_id == self.to_location_id:
+            raise ValueError('Source and destination locations cannot be the same')
+        return self
 
 
 class TransferLineResponse(BaseModel):
@@ -129,11 +134,11 @@ class TransferResponse(BaseModel):
 
 # ─── Adjustment ──────────────────────────────────────────────────────
 class AdjustmentCreate(BaseModel):
-    product_id: int
-    location_id: int
-    recorded_quantity: int
-    actual_quantity: int
-    notes: Optional[str] = None
+    product_id: int = Field(..., gt=0)
+    location_id: int = Field(..., gt=0)
+    recorded_quantity: int = Field(..., ge=0)
+    actual_quantity: int = Field(..., ge=0)
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 class AdjustmentResponse(BaseModel):

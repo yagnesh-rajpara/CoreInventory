@@ -1,13 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
 
 # ─── Warehouse ───────────────────────────────────────────────────────
 class WarehouseCreate(BaseModel):
-    name: str
-    short_code: str
-    address: Optional[str] = None
+    name: str = Field(..., min_length=3, max_length=100)
+    short_code: str = Field(..., min_length=2, max_length=10, pattern=r'^[A-Z0-9\-]+$')
+    address: Optional[str] = Field(None, max_length=255)
 
 
 class WarehouseUpdate(BaseModel):
@@ -41,9 +41,9 @@ class WarehouseResponse(BaseModel):
 
 # ─── Location ────────────────────────────────────────────────────────
 class LocationCreate(BaseModel):
-    name: str
-    short_code: str
-    warehouse_id: int
+    name: str = Field(..., min_length=3, max_length=100)
+    short_code: str = Field(..., min_length=2, max_length=10, pattern=r'^[A-Z0-9\-]+$')
+    warehouse_id: int = Field(..., gt=0)
 
 
 class LocationUpdate(BaseModel):

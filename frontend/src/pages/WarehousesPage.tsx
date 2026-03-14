@@ -1,29 +1,73 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { type SubmitHandler, useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { toast } from 'sonner'
 import api from '@/lib/api'
 import type { Warehouse } from '@/types'
 import { Plus, Warehouse as WarehouseIcon, MapPin, X } from 'lucide-react'
+
+const warehouseSchema = z.object({
+  name: z.string().min(3, "Name must be at least 3 characters"),
+  short_code: z.string().min(2, "Short code is required"),
+  address: z.string().optional()
+})
+
+const locationSchema = z.object({
+  name: z.string().min(3, "Name must be at least 3 characters"),
+  short_code: z.string().min(2, "Short code is required"),
+  warehouse_id: z.coerce.number().min(1, "Warehouse is required")
+})
+
+type WarehouseFormData = z.infer<typeof warehouseSchema>
+type LocationFormData = z.infer<typeof locationSchema>
 
 export default function WarehousesPage() {
   const qc = useQueryClient()
   const [showWhModal, setShowWhModal] = useState(false)
   const [showLocModal, setShowLocModal] = useState(false)
-  const [whForm, setWhForm] = useState({ name: '', short_code: '', address: '' })
-  const [locForm, setLocForm] = useState({ name: '', short_code: '', warehouse_id: '' })
+
+  const whForm = useForm<WarehouseFormData>({
+    resolver: zodResolver(warehouseSchema) as any
+  })
+
+  const locForm = useForm<LocationFormData>({
+    resolver: zodResolver(locationSchema) as any
+  })
 
   const { data: warehouses = [], isLoading } = useQuery<Warehouse[]>({
     queryKey: ['warehouses'], queryFn: () => api.get('/warehouses').then(r => r.data),
   })
 
-  const createWh = useMutation({
-    mutationFn: (d: any) => api.post('/warehouses', d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['warehouses'] }); setShowWhModal(false); setWhForm({ name: '', short_code: '', address: '' }) },
+  const createWhMutation = useMutation({
+    mutationFn: (d: WarehouseFormData) => api.post('/warehouses', d),
+    onSuccess: () => { 
+      qc.invalidateQueries({ queryKey: ['warehouses'] })
+      setShowWhModal(false)
+      whForm.reset()
+      toast.success('Warehouse created successfully')
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.detail || 'Failed to create warehouse')
+    }
   })
 
-  const createLoc = useMutation({
-    mutationFn: (d: any) => api.post('/warehouses/locations', d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['warehouses'] }); setShowLocModal(false); setLocForm({ name: '', short_code: '', warehouse_id: '' }) },
+  const createLocMutation = useMutation({
+    mutationFn: (d: LocationFormData) => api.post('/warehouses/locations', d),
+    onSuccess: () => { 
+      qc.invalidateQueries({ queryKey: ['warehouses'] })
+      setShowLocModal(false)
+      locForm.reset()
+      toast.success('Location created successfully')
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.detail || 'Failed to create location')
+    }
   })
+
+  const onWhSubmit: SubmitHandler<WarehouseFormData> = (data) => createWhMutation.mutate(data)
+  const onLocSubmit: SubmitHandler<LocationFormData> = (data) => createLocMutation.mutate(data)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -78,14 +122,27 @@ export default function WarehousesPage() {
       {showWhModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl mx-4">
-            <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-semibold">New Warehouse</h3><button onClick={() => setShowWhModal(false)} className="rounded-lg p-1 hover:bg-muted"><X className="h-5 w-5" /></button></div>
-            <form onSubmit={e => { e.preventDefault(); createWh.mutate(whForm) }} className="space-y-4">
-              <div><label className="block text-sm font-medium mb-1">Name</label><input value={whForm.name} onChange={e => setWhForm({...whForm, name: e.target.value})} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none" /></div>
-              <div><label className="block text-sm font-medium mb-1">Short Code</label><input value={whForm.short_code} onChange={e => setWhForm({...whForm, short_code: e.target.value})} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="WH-XXX" /></div>
-              <div><label className="block text-sm font-medium mb-1">Address</label><input value={whForm.address} onChange={e => setWhForm({...whForm, address: e.target.value})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none" /></div>
-              <div className="flex justify-end gap-3 pt-2">
+            <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-semibold">New Warehouse</h3><button type="button" onClick={() => setShowWhModal(false)} className="rounded-lg p-1 hover:bg-muted"><X className="h-5 w-5" /></button></div>
+            <form onSubmit={whForm.handleSubmit(onWhSubmit)} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <input {...whForm.register('name')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none ${whForm.formState.errors.name ? 'border-red-500' : 'border-border'}`} />
+                {whForm.formState.errors.name && <p className="text-red-500 text-xs mt-1">{whForm.formState.errors.name.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Short Code</label>
+                <input {...whForm.register('short_code')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none ${whForm.formState.errors.short_code ? 'border-red-500' : 'border-border'}`} placeholder="WH-XXX" />
+                {whForm.formState.errors.short_code && <p className="text-red-500 text-xs mt-1">{whForm.formState.errors.short_code.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Address</label>
+                <input {...whForm.register('address')} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none" />
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-border">
                 <button type="button" onClick={() => setShowWhModal(false)} className="rounded-lg px-4 py-2 text-sm border border-border hover:bg-muted transition-colors">Cancel</button>
-                <button type="submit" disabled={createWh.isPending} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">{createWh.isPending ? 'Creating...' : 'Create'}</button>
+                <button type="submit" disabled={whForm.formState.isSubmitting} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                  {whForm.formState.isSubmitting ? 'Creating...' : 'Create Warehouse'}
+                </button>
               </div>
             </form>
           </div>
@@ -96,19 +153,31 @@ export default function WarehousesPage() {
       {showLocModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl mx-4">
-            <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-semibold">New Location</h3><button onClick={() => setShowLocModal(false)} className="rounded-lg p-1 hover:bg-muted"><X className="h-5 w-5" /></button></div>
-            <form onSubmit={e => { e.preventDefault(); createLoc.mutate({...locForm, warehouse_id: Number(locForm.warehouse_id)}) }} className="space-y-4">
-              <div><label className="block text-sm font-medium mb-1">Warehouse</label>
-                <select value={locForm.warehouse_id} onChange={e => setLocForm({...locForm, warehouse_id: e.target.value})} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none">
+            <div className="flex items-center justify-between mb-6"><h3 className="text-lg font-semibold">New Location</h3><button type="button" onClick={() => setShowLocModal(false)} className="rounded-lg p-1 hover:bg-muted"><X className="h-5 w-5" /></button></div>
+            <form onSubmit={locForm.handleSubmit(onLocSubmit)} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Warehouse</label>
+                <select {...locForm.register('warehouse_id')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none ${locForm.formState.errors.warehouse_id ? 'border-red-500' : 'border-border'}`}>
                   <option value="">Select warehouse</option>
                   {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
+                {locForm.formState.errors.warehouse_id && <p className="text-red-500 text-xs mt-1">{locForm.formState.errors.warehouse_id.message}</p>}
               </div>
-              <div><label className="block text-sm font-medium mb-1">Name</label><input value={locForm.name} onChange={e => setLocForm({...locForm, name: e.target.value})} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none" /></div>
-              <div><label className="block text-sm font-medium mb-1">Short Code</label><input value={locForm.short_code} onChange={e => setLocForm({...locForm, short_code: e.target.value})} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none" /></div>
-              <div className="flex justify-end gap-3 pt-2">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <input {...locForm.register('name')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none ${locForm.formState.errors.name ? 'border-red-500' : 'border-border'}`} />
+                {locForm.formState.errors.name && <p className="text-red-500 text-xs mt-1">{locForm.formState.errors.name.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Short Code</label>
+                <input {...locForm.register('short_code')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none ${locForm.formState.errors.short_code ? 'border-red-500' : 'border-border'}`} />
+                {locForm.formState.errors.short_code && <p className="text-red-500 text-xs mt-1">{locForm.formState.errors.short_code.message}</p>}
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-border">
                 <button type="button" onClick={() => setShowLocModal(false)} className="rounded-lg px-4 py-2 text-sm border border-border hover:bg-muted transition-colors">Cancel</button>
-                <button type="submit" disabled={createLoc.isPending} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">{createLoc.isPending ? 'Creating...' : 'Create'}</button>
+                <button type="submit" disabled={locForm.formState.isSubmitting} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                  {locForm.formState.isSubmitting ? 'Creating...' : 'Create Location'}
+                </button>
               </div>
             </form>
           </div>

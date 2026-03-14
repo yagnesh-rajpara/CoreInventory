@@ -8,11 +8,13 @@ from app.models import StockMove, Product, Location
 router = APIRouter(prefix="/api/moves", tags=["Stock Moves"])
 
 
-@router.get("")
+@router.get("", response_model=dict)
 def list_moves(
     search: Optional[str] = Query(None),
     move_type: Optional[str] = Query(None),
     product_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
     q = db.query(StockMove)
@@ -23,13 +25,15 @@ def list_moves(
     if search:
         q = q.filter(StockMove.reference.ilike(f"%{search}%"))
 
-    moves = q.order_by(StockMove.created_at.desc()).limit(500).all()
-    results = []
+    total = q.count()
+    moves = q.order_by(StockMove.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+    
+    items = []
     for m in moves:
         product = db.query(Product).filter_by(id=m.product_id).first()
         fl = db.query(Location).filter_by(id=m.from_location_id).first() if m.from_location_id else None
         tl = db.query(Location).filter_by(id=m.to_location_id).first() if m.to_location_id else None
-        results.append({
+        items.append({
             "id": m.id,
             "product_id": m.product_id,
             "product_name": product.name if product else "",
@@ -43,4 +47,4 @@ def list_moves(
             "status": m.status.value if m.status else "",
             "created_at": m.created_at,
         })
-    return results
+    return {"total": total, "items": items}

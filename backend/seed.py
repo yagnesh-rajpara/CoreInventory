@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.database import SessionLocal
 from app.models import (
     User, UserRole, ProductCategory, Product, Warehouse, Location,
-    StockQuantity, Receipt, ReceiptLine, OperationStatus,
+    StockQuantity, Receipt, ReceiptLine, OperationStatus, StockMove, MoveType
 )
 from app.core.security import hash_password
 
@@ -113,6 +113,13 @@ def seed():
         ]
         for pid, lid, qty in stock_entries:
             db.add(StockQuantity(product_id=pid, location_id=lid, quantity=qty))
+            if qty > 0:
+                sku = db.query(Product.sku).filter_by(id=pid).scalar()
+                db.add(StockMove(
+                    product_id=pid, to_location_id=lid, quantity=qty,
+                    move_type=MoveType.ADJUSTMENT, reference=f"INIT-{sku}",
+                    status=OperationStatus.DONE
+                ))
             db.flush()
 
         # ── Sample Receipt (draft) ─────────────────────────────────────

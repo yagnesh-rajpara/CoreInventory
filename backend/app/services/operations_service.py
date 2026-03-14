@@ -1,38 +1,35 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime, timezone
 from app.models import (
-    StockQuantity, StockMove, Receipt, ReceiptLine, Delivery, DeliveryLine,
-    InternalTransfer, TransferLine, StockAdjustment,
-    OperationStatus, MoveType,
+    StockMove, Receipt, Delivery, InternalTransfer, StockAdjustment,
+    OperationStatus, MoveType, Location
 )
 from app.core.exceptions import BadRequestException, InsufficientStockException, NotFoundException
 import uuid
 
-
 def _gen_ref(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:8].upper()}"
 
-
 # ─── Stock helpers ───────────────────────────────────────────────────
-def get_or_create_stock(db: Session, product_id: int, location_id: int) -> StockQuantity:
-    sq = db.query(StockQuantity).filter_by(product_id=product_id, location_id=location_id).first()
-    if not sq:
-        sq = StockQuantity(product_id=product_id, location_id=location_id, quantity=0)
-        db.add(sq)
-        db.flush()
-    return sq
+def get_stock_quantity(db: Session, product_id: int, location_id: int) -> int:
+    in_stock = db.query(func.coalesce(func.sum(StockMove.quantity), 0)).filter(
+        StockMove.product_id == product_id,
+        StockMove.to_location_id == location_id,
+        StockMove.status == OperationStatus.DONE
+    ).scalar()
+    out_stock = db.query(func.coalesce(func.sum(StockMove.quantity), 0)).filter(
+        StockMove.product_id == product_id,
+        StockMove.from_location_id == location_id,
+        StockMove.status == OperationStatus.DONE
+    ).scalar()
+    return in_stock - out_stock
 
-
-def increase_stock(db: Session, product_id: int, location_id: int, quantity: int):
-    sq = get_or_create_stock(db, product_id, location_id)
-    sq.quantity += quantity
-
-
-def decrease_stock(db: Session, product_id: int, location_id: int, quantity: int, product_name: str = "Product"):
-    sq = get_or_create_stock(db, product_id, location_id)
-    if sq.quantity < quantity:
-        raise InsufficientStockException(product_name)
-    sq.quantity -= quantity
+def check_sufficient_stock(db: Session, product_id: int, location_id: int, quantity: int, product_name: str = "Product"):
+    current = get_stock_quantity(db, product_id, location_id)
+    if current < quantity:
+        raise InsufficientStockException(f"{product_name} (Requested: {quantity}, Available: {current})")
+# old stock helpers removed
 
 
 def create_stock_move(db: Session, product_id: int, from_loc: int | None, to_loc: int | None,
@@ -61,15 +58,18 @@ def validate_receipt(db: Session, receipt_id: int):
     if not receipt.lines:
         raise BadRequestException("Receipt has no lines")
 
-    for line in receipt.lines:
-        increase_stock(db, line.product_id, receipt.location_id, line.quantity)
-        create_stock_move(db, line.product_id, None, receipt.location_id,
-                          line.quantity, MoveType.RECEIPT, receipt.reference)
+    try:
+        for line in receipt.lines:
+            create_stock_move(db, line.product_id, None, receipt.location_id,
+                              line.quantity, MoveType.RECEIPT, receipt.reference)
 
-    receipt.status = OperationStatus.DONE
-    receipt.validated_at = datetime.now(timezone.utc)
-    db.commit()
-    return receipt
+        receipt.status = OperationStatus.DONE
+        receipt.validated_at = datetime.now(timezone.utc)
+        db.commit()
+        return receipt
+    except Exception as e:
+        db.rollback()
+        raise e
 
 
 # ─── Delivery validation ────────────────────────────────────────────
@@ -84,16 +84,20 @@ def validate_delivery(db: Session, delivery_id: int):
     if not delivery.lines:
         raise BadRequestException("Delivery has no lines")
 
-    for line in delivery.lines:
-        product_name = line.product.name if line.product else "Product"
-        decrease_stock(db, line.product_id, delivery.location_id, line.quantity, product_name)
-        create_stock_move(db, line.product_id, delivery.location_id, None,
-                          line.quantity, MoveType.DELIVERY, delivery.reference)
+    try:
+        for line in delivery.lines:
+            product_name = line.product.name if line.product else "Product"
+            check_sufficient_stock(db, line.product_id, delivery.location_id, line.quantity, product_name)
+            create_stock_move(db, line.product_id, delivery.location_id, None,
+                              line.quantity, MoveType.DELIVERY, delivery.reference)
 
-    delivery.status = OperationStatus.DONE
-    delivery.validated_at = datetime.now(timezone.utc)
-    db.commit()
-    return delivery
+        delivery.status = OperationStatus.DONE
+        delivery.validated_at = datetime.now(timezone.utc)
+        db.commit()
+        return delivery
+    except Exception as e:
+        db.rollback()
+        raise e
 
 
 # ─── Transfer validation ────────────────────────────────────────────
@@ -108,27 +112,32 @@ def validate_transfer(db: Session, transfer_id: int):
     if not transfer.lines:
         raise BadRequestException("Transfer has no lines")
 
-    for line in transfer.lines:
-        product_name = line.product.name if line.product else "Product"
-        decrease_stock(db, line.product_id, transfer.from_location_id, line.quantity, product_name)
-        increase_stock(db, line.product_id, transfer.to_location_id, line.quantity)
-        create_stock_move(db, line.product_id, transfer.from_location_id, transfer.to_location_id,
-                          line.quantity, MoveType.TRANSFER_OUT, transfer.reference)
+    try:
+        for line in transfer.lines:
+            product_name = line.product.name if line.product else "Product"
+            check_sufficient_stock(db, line.product_id, transfer.from_location_id, line.quantity, product_name)
+            create_stock_move(db, line.product_id, transfer.from_location_id, transfer.to_location_id,
+                              line.quantity, MoveType.TRANSFER_OUT, transfer.reference)
 
-    transfer.status = OperationStatus.DONE
-    transfer.validated_at = datetime.now(timezone.utc)
-    db.commit()
-    return transfer
+        transfer.status = OperationStatus.DONE
+        transfer.validated_at = datetime.now(timezone.utc)
+        db.commit()
+        return transfer
+    except Exception as e:
+        db.rollback()
+        raise e
 
 
 # ─── Adjustment ──────────────────────────────────────────────────────
 def apply_adjustment(db: Session, adj: StockAdjustment):
-    diff = adj.actual_quantity - adj.recorded_quantity
-    if diff == 0:
-        return
-    sq = get_or_create_stock(db, adj.product_id, adj.location_id)
-    sq.quantity = adj.actual_quantity
-    move_type = MoveType.ADJUSTMENT
-    create_stock_move(db, adj.product_id, adj.location_id if diff < 0 else None,
-                      adj.location_id if diff > 0 else None,
-                      abs(diff), move_type, adj.reference)
+    try:
+        diff = adj.actual_quantity - adj.recorded_quantity
+        if diff == 0:
+            return
+        move_type = MoveType.ADJUSTMENT
+        create_stock_move(db, adj.product_id, adj.location_id if diff < 0 else None,
+                          adj.location_id if diff > 0 else None,
+                          abs(diff), move_type, adj.reference)
+    except Exception as e:
+        db.rollback()
+        raise e

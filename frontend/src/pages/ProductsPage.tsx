@@ -1,32 +1,64 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { type SubmitHandler, useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { useDebounce } from 'use-debounce'
+import { toast } from 'sonner'
 import api from '@/lib/api'
 import type { Product, Category, Location, Warehouse } from '@/types'
 import { Plus, Search, Package, X } from 'lucide-react'
+import { Pagination } from '@/components/Pagination'
+
+const productSchema = z.object({
+  name: z.string().min(3, "Name must be at least 3 characters").max(100),
+  sku: z.string().regex(/^[A-Z0-9\-]+$/, "SKU can only contain uppercase letters, numbers, and hyphens"),
+  category_id: z.coerce.number().optional().nullable(),
+  unit_of_measure: z.string().min(1, "Unit of measure is required"),
+  low_stock_threshold: z.coerce.number().min(0, "Must be >= 0"),
+  initial_stock: z.coerce.number().min(0, "Must be >= 0"),
+  location_id: z.coerce.number().optional().nullable(),
+})
+
+type ProductFormData = z.infer<typeof productSchema>
 
 export default function ProductsPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
+  const [debouncedSearch] = useDebounce(search, 300)
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ name: '', sku: '', category_id: '', unit_of_measure: 'Unit', low_stock_threshold: 10, initial_stock: 0, location_id: '' })
+  const [page, setPage] = useState(1)
 
-  const { data: products = [], isLoading } = useQuery<Product[]>({
-    queryKey: ['products', search],
-    queryFn: () => api.get('/products', { params: { search: search || undefined } }).then(r => r.data),
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<ProductFormData>({
+    resolver: zodResolver(productSchema) as any,
+    defaultValues: { name: '', sku: '', unit_of_measure: 'Unit', low_stock_threshold: 10, initial_stock: 0, category_id: null, location_id: null }
   })
+
+  const { data, isLoading } = useQuery<{ total: number, items: Product[] }>({
+    queryKey: ['products', debouncedSearch, page],
+    queryFn: () => api.get('/products', { params: { search: debouncedSearch || undefined, page, limit: 20 } }).then(r => r.data),
+  })
+  const products = data?.items || []
   const { data: categories = [] } = useQuery<Category[]>({ queryKey: ['categories'], queryFn: () => api.get('/products/categories').then(r => r.data) })
   const { data: warehouses = [] } = useQuery<Warehouse[]>({ queryKey: ['warehouses'], queryFn: () => api.get('/warehouses').then(r => r.data) })
 
   const allLocations: Location[] = warehouses.flatMap(w => w.locations || [])
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => api.post('/products', data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['products'] }); setShowModal(false); setForm({ name: '', sku: '', category_id: '', unit_of_measure: 'Unit', low_stock_threshold: 10, initial_stock: 0, location_id: '' }) },
+    mutationFn: (data: ProductFormData) => api.post('/products', data),
+    onSuccess: () => { 
+      qc.invalidateQueries({ queryKey: ['products'] })
+      setShowModal(false)
+      reset()
+      toast.success('Product created successfully')
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.detail || 'Failed to create product')
+    }
   })
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault()
-    createMutation.mutate({ ...form, category_id: form.category_id ? Number(form.category_id) : null, location_id: form.location_id ? Number(form.location_id) : null })
+  const onSubmit: SubmitHandler<ProductFormData> = (data) => {
+    createMutation.mutate(data)
   }
 
   const getStockColor = (product: Product) => {
@@ -94,6 +126,9 @@ export default function ProductsPage() {
             </table>
           </div>
         )}
+        {data && data.total > 0 && (
+          <Pagination page={page} total={data.total} onPageChange={setPage} />
+        )}
       </div>
 
       {/* Modal */}
@@ -102,53 +137,57 @@ export default function ProductsPage() {
           <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl mx-4">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold">New Product</h3>
-              <button onClick={() => setShowModal(false)} className="rounded-lg p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
+              <button type="button" onClick={() => setShowModal(false)} className="rounded-lg p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
             </div>
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Name</label>
-                  <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none" />
+                  <input {...register('name')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none ${errors.name ? 'border-red-500' : 'border-border'}`} />
+                  {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">SKU</label>
-                  <input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none" />
+                  <input {...register('sku')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none ${errors.sku ? 'border-red-500' : 'border-border'}`} />
+                  {errors.sku && <p className="text-red-500 text-xs mt-1">{errors.sku.message}</p>}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Category</label>
-                  <select value={form.category_id} onChange={e => setForm({...form, category_id: e.target.value})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none">
+                  <select {...register('category_id')} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none">
                     <option value="">None</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Unit of Measure</label>
-                  <input value={form.unit_of_measure} onChange={e => setForm({...form, unit_of_measure: e.target.value})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none" />
+                  <input {...register('unit_of_measure')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none ${errors.unit_of_measure ? 'border-red-500' : 'border-border'}`} />
+                  {errors.unit_of_measure && <p className="text-red-500 text-xs mt-1">{errors.unit_of_measure.message}</p>}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Low Stock Threshold</label>
-                  <input type="number" value={form.low_stock_threshold} onChange={e => setForm({...form, low_stock_threshold: Number(e.target.value)})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none" />
+                  <input type="number" {...register('low_stock_threshold')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none ${errors.low_stock_threshold ? 'border-red-500' : 'border-border'}`} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Initial Stock</label>
-                  <input type="number" value={form.initial_stock} onChange={e => setForm({...form, initial_stock: Number(e.target.value)})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none" />
+                  <input type="number" {...register('initial_stock')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none ${errors.initial_stock ? 'border-red-500' : 'border-border'}`} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Location</label>
-                  <select value={form.location_id} onChange={e => setForm({...form, location_id: e.target.value})} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none">
+                  <label className="block text-sm font-medium mb-1">Location (if Initial Stock &gt; 0)</label>
+                  <select {...register('location_id')} className={`w-full rounded-lg border bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none ${errors.location_id ? 'border-red-500' : 'border-border'}`}>
                     <option value="">Select</option>
                     {allLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
+                  {errors.location_id && <p className="text-red-500 text-xs mt-1">{errors.location_id.message}</p>}
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4">
                 <button type="button" onClick={() => setShowModal(false)} className="rounded-lg px-4 py-2 text-sm font-medium border border-border hover:bg-muted transition-colors">Cancel</button>
-                <button type="submit" disabled={createMutation.isPending} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                  {createMutation.isPending ? 'Creating...' : 'Create Product'}
+                <button type="submit" disabled={isSubmitting} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
+                  {isSubmitting ? 'Creating...' : 'Create Product'}
                 </button>
               </div>
             </form>

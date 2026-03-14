@@ -32,14 +32,17 @@ export default function DashboardPage() {
   })
   
   // Data Fetching
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
+  const { data: productsData, isLoading: isLoadingProducts } = useQuery<{ total: number, items: Product[] }>({
     queryKey: ['products'],
-    queryFn: () => api.get('/products').then(res => res.data)
+    queryFn: () => api.get('/products', { params: { limit: 1000 } }).then(res => res.data)
   })
-  const { data: moves = [], isLoading: isLoadingMoves } = useQuery<StockMove[]>({
+  const products = productsData?.items || []
+
+  const { data: movesData, isLoading: isLoadingMoves } = useQuery<{ total: number, items: StockMove[] }>({
     queryKey: ['moves'],
-    queryFn: () => api.get('/moves').then(res => res.data)
+    queryFn: () => api.get('/moves', { params: { limit: 1000 } }).then(res => res.data)
   })
+  const moves = movesData?.items || []
   const { data: categories = [], isLoading: isLoadingCategories } = useQuery<Category[]>({
     queryKey: ['categories'],
     queryFn: () => api.get('/products/categories').then(res => res.data)

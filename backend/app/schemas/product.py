@@ -1,12 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
-
 # ─── Category ────────────────────────────────────────────────────────
 class CategoryCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
+    name: str = Field(..., min_length=3, max_length=50)
+    description: Optional[str] = Field(None, max_length=255)
 
 
 class CategoryResponse(BaseModel):
@@ -21,21 +20,21 @@ class CategoryResponse(BaseModel):
 
 # ─── Product ─────────────────────────────────────────────────────────
 class ProductCreate(BaseModel):
-    name: str
-    sku: str
+    name: str = Field(..., min_length=3, max_length=100)
+    sku: str = Field(..., pattern=r'^[A-Z0-9\-]+$')
     category_id: Optional[int] = None
-    unit_of_measure: str = "Unit"
-    low_stock_threshold: int = 10
-    initial_stock: int = 0
+    unit_of_measure: str = Field(default="Unit", min_length=1)
+    low_stock_threshold: int = Field(default=10, ge=0)
+    initial_stock: int = Field(default=0, ge=0)
     location_id: Optional[int] = None
 
 
 class ProductUpdate(BaseModel):
-    name: Optional[str] = None
-    sku: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=3, max_length=100)
+    sku: Optional[str] = Field(None, pattern=r'^[A-Z0-9\-]+$')
     category_id: Optional[int] = None
-    unit_of_measure: Optional[str] = None
-    low_stock_threshold: Optional[int] = None
+    unit_of_measure: Optional[str] = Field(None, min_length=1)
+    low_stock_threshold: Optional[int] = Field(None, ge=0)
 
 
 class StockByLocation(BaseModel):

@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/operations", tags=["Operations"])
 
 
 def _gen_ref(prefix: str) -> str:
-    return f"{prefix}-{uuid.uuid4().hex[:8].upper()}"
+    return f"{prefix}-{str(uuid.uuid4().hex)[:8].upper()}"
 
 
 def _receipt_to_response(r: Receipt, db: Session) -> dict:
@@ -42,12 +42,23 @@ def _receipt_to_response(r: Receipt, db: Session) -> dict:
 
 
 # ─── Receipts ────────────────────────────────────────────────────────
-@router.get("/receipts", response_model=list[dict])
-def list_receipts(status: Optional[str] = None, db: Session = Depends(get_db)):
+@router.get("/receipts", response_model=dict)
+def list_receipts(
+    status: Optional[str] = None, 
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
     q = db.query(Receipt)
     if status:
         q = q.filter(Receipt.status == status)
-    return [_receipt_to_response(r, db) for r in q.order_by(Receipt.created_at.desc()).all()]
+    if search:
+        q = q.filter(Receipt.reference.ilike(f"%{search}%") | Receipt.supplier_name.ilike(f"%{search}%"))
+    
+    total = q.count()
+    items = [_receipt_to_response(r, db) for r in q.order_by(Receipt.created_at.desc()).offset((page - 1) * limit).limit(limit).all()]
+    return {"total": total, "items": items}
 
 
 @router.get("/receipts/{rid}")
@@ -107,12 +118,23 @@ def _delivery_to_response(d: Delivery, db: Session) -> dict:
     }
 
 
-@router.get("/deliveries", response_model=list[dict])
-def list_deliveries(status: Optional[str] = None, db: Session = Depends(get_db)):
+@router.get("/deliveries", response_model=dict)
+def list_deliveries(
+    status: Optional[str] = None, 
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
     q = db.query(Delivery)
     if status:
         q = q.filter(Delivery.status == status)
-    return [_delivery_to_response(d, db) for d in q.order_by(Delivery.created_at.desc()).all()]
+    if search:
+        q = q.filter(Delivery.reference.ilike(f"%{search}%") | Delivery.customer_name.ilike(f"%{search}%"))
+        
+    total = q.count()
+    items = [_delivery_to_response(d, db) for d in q.order_by(Delivery.created_at.desc()).offset((page-1)*limit).limit(limit).all()]
+    return {"total": total, "items": items}
 
 
 @router.get("/deliveries/{did}")
@@ -176,12 +198,23 @@ def _transfer_to_response(t: InternalTransfer, db: Session) -> dict:
     }
 
 
-@router.get("/transfers", response_model=list[dict])
-def list_transfers(status: Optional[str] = None, db: Session = Depends(get_db)):
+@router.get("/transfers", response_model=dict)
+def list_transfers(
+    status: Optional[str] = None, 
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
     q = db.query(InternalTransfer)
     if status:
         q = q.filter(InternalTransfer.status == status)
-    return [_transfer_to_response(t, db) for t in q.order_by(InternalTransfer.created_at.desc()).all()]
+    if search:
+        q = q.filter(InternalTransfer.reference.ilike(f"%{search}%"))
+        
+    total = q.count()
+    items = [_transfer_to_response(t, db) for t in q.order_by(InternalTransfer.created_at.desc()).offset((page-1)*limit).limit(limit).all()]
+    return {"total": total, "items": items}
 
 
 @router.get("/transfers/{tid}")
@@ -228,13 +261,24 @@ def cancel_transfer(tid: int, db: Session = Depends(get_db), user=Depends(get_cu
 
 
 # ─── Stock Adjustments ──────────────────────────────────────────────
-@router.get("/adjustments", response_model=list[dict])
-def list_adjustments(db: Session = Depends(get_db)):
-    adjs = db.query(StockAdjustment).order_by(StockAdjustment.created_at.desc()).all()
-    results = []
+@router.get("/adjustments", response_model=dict)
+def list_adjustments(
+    search: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    q = db.query(StockAdjustment)
+    if search:
+        q = q.filter(StockAdjustment.reference.ilike(f"%{search}%") | StockAdjustment.notes.ilike(f"%{search}%"))
+    
+    total = q.count()
+    adjs = q.order_by(StockAdjustment.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+    
+    items = []
     for a in adjs:
         loc = db.query(Location).filter_by(id=a.location_id).first()
-        results.append({
+        items.append({
             "id": a.id, "reference": a.reference,
             "product_id": a.product_id, "product_name": a.product.name if a.product else "",
             "location_id": a.location_id, "location_name": loc.name if loc else "",
@@ -243,7 +287,7 @@ def list_adjustments(db: Session = Depends(get_db)):
             "creator_name": a.creator.full_name if a.creator else "",
             "created_at": a.created_at,
         })
-    return results
+    return {"total": total, "items": items}
 
 
 @router.post("/adjustments", status_code=201)
