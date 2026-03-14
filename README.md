@@ -42,10 +42,38 @@ docker-compose up --build
 - **Internal Transfers** — move stock between locations
 - **Stock Adjustments** — correct recorded vs actual quantities
 - **Move History** — complete stock ledger with filters
-- **Auth** — signup, login, JWT, OTP password reset, role-based access
-- **Dark Mode** — toggle between light/dark themes
+- **Auth** — signup, login, JWT, Secure 3-step OTP password reset, role-based access
+- **Security** — Bcrypt hashing, CSPRNG OTPs, brute-force protection, user enumeration prevention
+- **Dark Mode** — premium dark/light themes with glassmorphism
+
+## 📧 Email Configuration (OTP)
+
+To enable the password reset system, update your `.env` with SMTP credentials.
+
+### Gmail Setup:
+1. Enable **2FA** on your Google Account.
+2. Create an **App Password** at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
+3. Update `.env`:
+```env
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USE_TLS=true
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASSWORD=your-app-password
+```
+
+*Note: If credentials are not provided, the system logs the OTP to the backend console for development.*
+
+## 🛡️ Security Highlights
+
+- **Hashed OTPs**: Codes are hashed with `bcrypt` before storage, protecting against database leaks.
+- **Brute-Force Protection**: Max 5 attempts per OTP; exceeding this invalidates the code.
+- **Enumeration Prevention**: Uniform API responses prevent attackers from discovering valid email addresses.
+- **Two-Token Flow**: decouple OTP verification from password change using high-entropy UUIDs.
+- **Safe Error Handling**: prevents React crashes by sanitizing recursive backend validation objects.
 
 ## Project Structure
+... [rest of the structure]
 
 ```
 coreinventory/
